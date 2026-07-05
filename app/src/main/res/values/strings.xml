@@ -35,6 +35,9 @@
     <string name="api_error">API error: %1$s</string>
     <string name="network_error">Network error: %1$s. Check Wi-Fi and retry.</string>
     <string name="generic_error">Something went wrong</string>
+    <string name="stopped">Stopped.</string>
+    <string name="out_of_memory">Ran out of memory preparing the pages - select fewer pages and try again.</string>
+    <string name="pdf_too_large">This PDF is %1$s, above the API\'s request limit. Ask about a smaller file, or export pages as images.</string>
     <string name="parse_failed">Could not read this notebook: %1$s</string>
     <string name="too_many_pages">Selected %1$d pages, but the limit is %2$d (change it in Settings or narrow the range).</string>
     <string name="nothing_shared">Nothing to ask about. Open a notebook from the main screen or share an image/PDF to this app.</string>
@@ -54,9 +57,9 @@
     <string name="test_key">Test key</string>
     <string name="testing_key">Testing key…</string>
     <string name="key_valid">Key works.</string>
-    <string name="key_file_missing">No key file found. Put your key in %1$s (copy it over USB), then tap again.</string>
+    <string name="key_file_missing">No key file found. Put your key in %1$s (copy it over USB), make sure storage permission is granted, then tap again.</string>
     <string name="key_file_empty">The key file is empty.</string>
-    <string name="key_imported">Key imported. Tap Save.</string>
+    <string name="key_imported">Key imported. Tap Save - and consider deleting the key file from storage.</string>
     <string name="model_label">Model</string>
     <string name="max_pages_label">Max pages per question</string>
     <string name="save">Save</string>

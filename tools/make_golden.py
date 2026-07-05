@@ -286,6 +286,15 @@ def build_variants() -> dict[str, bytes]:
     for x in range(0, w, 200):
         for y in range(h):
             img.putpixel((x, y), (60, 60, 200, 128))  # semi-transparent
+    # Adversarial block: every alpha value with varied colors (exercises the
+    # exact PIL blend/rounding semantics), plus luma==255 edge cases.
+    for i in range(256):
+        for j in range(64):
+            img.putpixel((100 + i, 1500 + j), ((i * 37 + j) % 256, (i * 91) % 256, (j * 53) % 256, i))
+    for i, px in enumerate([(255, 255, 254, 255), (254, 255, 255, 255), (255, 254, 255, 255),
+                            (254, 254, 254, 0), (255, 255, 255, 1), (0, 0, 0, 1)]):
+        for j in range(32):
+            img.putpixel((400 + i, 1600 + j), px)
     png_buf = io.BytesIO()
     img.save(png_buf, format="PNG")
     main = draw_codes(w, h, [(CODE_BLACK, 400, 400, 1000, 300)])

@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listView: ListView
     private lateinit var emptyView: TextView
     private var entries: List<NoteEntry> = emptyList()
+    private var permissionRequested = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,9 +47,12 @@ class MainActivity : AppCompatActivity() {
             refresh()
         } else {
             emptyView.text = getString(R.string.storage_permission_needed)
-            ActivityCompat.requestPermissions(
-                this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), REQUEST_STORAGE
-            )
+            if (!permissionRequested) {
+                permissionRequested = true
+                ActivityCompat.requestPermissions(
+                    this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), REQUEST_STORAGE
+                )
+            }
         }
     }
 

@@ -72,7 +72,7 @@ class PageRenderer(private val pngDecoder: PngBitmapDecoder? = null) {
                 rgbaLayers[name] = bitmap
                 continue
             }
-            when (val protocol = layer.protocol ?: page.protocol) {
+            when (val protocol = layer.protocol) {
                 "RATTA_RLE" -> {
                     val allBlank = isBg && style == "style_white" &&
                         binary.size == SPECIAL_WHITE_STYLE_BLOCK_SIZE
@@ -117,9 +117,10 @@ class PageRenderer(private val pngDecoder: PngBitmapDecoder? = null) {
     }
 
     /**
-     * Composites a custom PNG template: first blended over white using its
-     * alpha channel, then pixels whose luminance is pure white-transparent
-     * (0xff) are skipped, mirroring supernotelib's flatten mask.
+     * Composites a custom PNG template, replicating supernotelib exactly:
+     * the template is alpha-blended over a 0xfe-white canvas (PIL's
+     * `_whiten_transparent`, with PIL's rounding blend), then pixels whose
+     * PIL luma is 0xff are treated as transparent by the flatten mask.
      */
     private fun compositeCustomBackground(out: IntArray, bg: RgbaBitmap, width: Int, height: Int) {
         if (bg.width != width || bg.height != height) {
@@ -130,19 +131,26 @@ class PageRenderer(private val pngDecoder: PngBitmapDecoder? = null) {
         for (i in out.indices) {
             val p = bg.pixels[i]
             val a = (p ushr 24) and 0xff
-            var r = (p ushr 16) and 0xff
-            var g = (p ushr 8) and 0xff
-            var b = p and 0xff
-            // Blend over white.
-            r = (r * a + 255 * (255 - a)) / 255
-            g = (g * a + 255 * (255 - a)) / 255
-            b = (b * a + 255 * (255 - a)) / 255
-            // ITU-R 601-2 luma, as used by PIL's convert('L').
-            val luma = (r * 299 + g * 587 + b * 114) / 1000
+            // PIL paste blend over the 0xfe canvas.
+            val r = pilBlend((p ushr 16) and 0xff, a)
+            val g = pilBlend((p ushr 8) and 0xff, a)
+            val b = pilBlend(p and 0xff, a)
+            // PIL convert('L'): rounded ITU-R 601-2 luma.
+            val luma = (r * 19595 + g * 38470 + b * 7471 + 0x8000) shr 16
             if (luma != RattaRleDecoder.GRAY_TRANSPARENT) {
                 out[i] = 0xFF000000.toInt() or (r shl 16) or (g shl 8) or b
             }
         }
+    }
+
+    /**
+     * PIL's mask blend of a foreground channel over the 0xfe white canvas:
+     * round((bg*(255-a) + fg*a) / 255), with PIL's MULDIV255 applied once to
+     * the combined sum.
+     */
+    private fun pilBlend(fg: Int, a: Int): Int {
+        val t = 0xfe * (255 - a) + fg * a + 128
+        return ((t shr 8) + t) shr 8
     }
 
     /**
@@ -157,12 +165,14 @@ class PageRenderer(private val pngDecoder: PngBitmapDecoder? = null) {
         val array = parseJsonArray(info)
             ?: parseJsonArray(decodeBase64OrNull(info))
             ?: throw NoteDecoderException("unparseable LAYERINFO")
-        val visibility = HashMap<String, Boolean>()
+        // Nullable values mirror Python: an entry with no isVisible stores
+        // None, and only MAINLAYER's None is later coerced to visible.
+        val visibility = HashMap<String, Boolean?>()
         for (element in array) {
             val obj = element.jsonObject
-            val isBg = obj["isBackgroundLayer"]?.jsonPrimitive?.booleanOrNull ?: false
+            val isBg = truthy(obj["isBackgroundLayer"]) ?: false
             val layerId = obj["layerId"]?.jsonPrimitive?.intOrNull
-            val isVisible = obj["isVisible"]?.jsonPrimitive?.booleanOrNull ?: false
+            val isVisible = truthy(obj["isVisible"])
             when {
                 isBg -> visibility["BGLAYER"] = isVisible
                 layerId == 0 -> visibility["MAINLAYER"] = isVisible
@@ -170,8 +180,17 @@ class PageRenderer(private val pngDecoder: PngBitmapDecoder? = null) {
             }
         }
         // Old files may omit MAINLAYER info; default it to visible.
-        if ("MAINLAYER" !in visibility) visibility["MAINLAYER"] = true
-        return visibility
+        if (visibility["MAINLAYER"] == null) visibility["MAINLAYER"] = true
+        return visibility.mapValues { it.value == true }
+    }
+
+    /** Python truthiness of a JSON scalar: false/0/""/null are falsy. */
+    private fun truthy(element: kotlinx.serialization.json.JsonElement?): Boolean? {
+        val primitive = element as? kotlinx.serialization.json.JsonPrimitive ?: return null
+        if (primitive is kotlinx.serialization.json.JsonNull) return null
+        primitive.booleanOrNull?.let { return it }
+        primitive.content.toDoubleOrNull()?.let { return it != 0.0 }
+        return primitive.content.isNotEmpty()
     }
 
     private fun parseJsonArray(text: String?): JsonArray? {
@@ -184,7 +203,8 @@ class PageRenderer(private val pngDecoder: PngBitmapDecoder? = null) {
     }
 
     private fun decodeBase64OrNull(text: String): String? = try {
-        String(Base64.getDecoder().decode(text), Charsets.UTF_8)
+        // MIME decoder skips whitespace/newlines, like Python's b64decode.
+        String(Base64.getMimeDecoder().decode(text), Charsets.UTF_8)
     } catch (e: IllegalArgumentException) {
         null
     }

@@ -56,6 +56,9 @@ class AskActivity : AppCompatActivity() {
 
     private var conversation: ClaudeConversation? = null
     @Volatile private var working = false
+    @Volatile private var stopRequested = false
+
+    private class StoppedException : Exception()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,7 +80,10 @@ class AskActivity : AppCompatActivity() {
 
         askButton.setOnClickListener { startTurn(promptInput.text.toString().trim()) }
         transcribeButton.setOnClickListener { startTurn(Prompts.TRANSCRIBE, isTranscribe = true) }
-        stopButton.setOnClickListener { conversation?.cancel() }
+        stopButton.setOnClickListener {
+            stopRequested = true
+            conversation?.cancel()
+        }
         copyButton.setOnClickListener { copyAnswer() }
         shareButton.setOnClickListener { shareAnswer() }
         resetButton.setOnClickListener { resetConversation() }
@@ -89,6 +95,12 @@ class AskActivity : AppCompatActivity() {
         when {
             intent.hasExtra(EXTRA_FILE_PATH) -> {
                 val file = File(intent.getStringExtra(EXTRA_FILE_PATH)!!)
+                if (!isAllowedNotePath(file)) {
+                    setStatus(getString(R.string.nothing_shared))
+                    askButton.isEnabled = false
+                    transcribeButton.isEnabled = false
+                    return
+                }
                 noteFile = file
                 titleView.text = file.name
                 if (file.extension.equals("note", ignoreCase = true)) {
@@ -152,6 +164,7 @@ class AskActivity : AppCompatActivity() {
             return
         }
         working = true
+        stopRequested = false
         setControlsEnabled(false)
         if (conversation == null) answerView.text = ""
         appendAnswerHeader(if (isTranscribe) getString(R.string.transcription) else question)
@@ -163,6 +176,7 @@ class AskActivity : AppCompatActivity() {
                 conversation = active
                 val attachments =
                     if (active.turnCount == 0) prepareAttachments(pagesSpec) else emptyList()
+                if (stopRequested) throw StoppedException()
                 setStatus(getString(R.string.waiting_for_claude, prefs.model.displayName))
                 var firstDelta = true
                 val result = active.ask(question, attachments) { delta ->
@@ -189,12 +203,22 @@ class AskActivity : AppCompatActivity() {
                     promptInput.setText("")
                     promptInput.hint = getString(R.string.follow_up_hint)
                 }
+            } catch (e: StoppedException) {
+                runOnUiThread { setStatus(getString(R.string.stopped)) }
             } catch (e: ClaudeApiException) {
                 runOnUiThread { setStatus(getString(R.string.api_error, e.message)) }
             } catch (e: IOException) {
-                runOnUiThread { setStatus(getString(R.string.network_error, e.message)) }
+                runOnUiThread {
+                    setStatus(
+                        if (stopRequested) getString(R.string.stopped)
+                        else getString(R.string.network_error, e.message)
+                    )
+                }
             } catch (e: IllegalArgumentException) {
                 runOnUiThread { setStatus(e.message ?: getString(R.string.generic_error)) }
+            } catch (e: OutOfMemoryError) {
+                conversation = null
+                runOnUiThread { setStatus(getString(R.string.out_of_memory)) }
             } catch (e: Exception) {
                 runOnUiThread { setStatus(getString(R.string.generic_error) + ": " + e.message) }
             } finally {
@@ -218,6 +242,7 @@ class AskActivity : AppCompatActivity() {
                 }
                 val renderer = PageRenderer(androidPngDecoder)
                 pages.mapIndexed { index, pageNumber ->
+                    if (stopRequested) throw StoppedException()
                     setStatus(getString(R.string.rendering_page, index + 1, pages.size))
                     val rendered = renderer.render(parsed, pageNumber)
                     val bitmap = Bitmap.createBitmap(
@@ -229,7 +254,17 @@ class AskActivity : AppCompatActivity() {
                     Attachment.png(out.toByteArray())
                 }
             }
-            file != null -> listOf(Attachment.pdf(file.readBytes()))
+            file != null -> {
+                if (file.length() > MAX_PDF_BYTES) {
+                    throw IllegalArgumentException(
+                        getString(
+                            R.string.pdf_too_large,
+                            android.text.format.Formatter.formatShortFileSize(this, file.length())
+                        )
+                    )
+                }
+                listOf(Attachment.pdf(file.readBytes()))
+            }
             else -> sharedUris.map { uri -> attachmentFromUri(uri) }
         }
     }
@@ -239,16 +274,51 @@ class AskActivity : AppCompatActivity() {
         val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: throw IOException(getString(R.string.cannot_read_shared))
         return if (type == "application/pdf") {
+            if (bytes.size > MAX_PDF_BYTES) {
+                throw IllegalArgumentException(
+                    getString(
+                        R.string.pdf_too_large,
+                        android.text.format.Formatter.formatShortFileSize(this, bytes.size.toLong())
+                    )
+                )
+            }
             Attachment.pdf(bytes)
         } else {
-            // Normalize any shared image format to PNG.
-            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            // Normalize shared images: downscale to the model's useful
+            // resolution and re-encode as JPEG (photos as PNG easily exceed
+            // the API's per-image size limit).
+            var bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 ?: throw IOException(getString(R.string.cannot_read_shared))
+            val longEdge = maxOf(bitmap.width, bitmap.height)
+            if (longEdge > MAX_IMAGE_EDGE) {
+                val scale = MAX_IMAGE_EDGE.toFloat() / longEdge
+                val scaled = Bitmap.createScaledBitmap(
+                    bitmap,
+                    (bitmap.width * scale).toInt().coerceAtLeast(1),
+                    (bitmap.height * scale).toInt().coerceAtLeast(1),
+                    true,
+                )
+                bitmap.recycle()
+                bitmap = scaled
+            }
             val out = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
             bitmap.recycle()
-            Attachment.png(out.toByteArray())
+            Attachment.jpeg(out.toByteArray())
         }
+    }
+
+    /** Only files inside the device's shared-storage notebook folders. */
+    private fun isAllowedNotePath(file: File): Boolean {
+        val root = android.os.Environment.getExternalStorageDirectory() ?: return false
+        val canonical = try {
+            file.canonicalFile
+        } catch (e: IOException) {
+            return false
+        }
+        val extensionOk = canonical.extension.equals("note", ignoreCase = true) ||
+            canonical.extension.equals("pdf", ignoreCase = true)
+        return extensionOk && canonical.path.startsWith(root.canonicalPath + File.separator)
     }
 
     private val androidPngDecoder = PngBitmapDecoder { data ->
@@ -310,5 +380,11 @@ class AskActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_FILE_PATH = "file_path"
+
+        // The Messages API caps requests at 32MB; leave room for base64.
+        private const val MAX_PDF_BYTES = 20L * 1024 * 1024
+
+        // Claude's maximum useful image resolution (long edge).
+        private const val MAX_IMAGE_EDGE = 2576
     }
 }

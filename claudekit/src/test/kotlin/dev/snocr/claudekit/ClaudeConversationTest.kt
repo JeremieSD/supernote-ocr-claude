@@ -221,6 +221,64 @@ class ClaudeConversationTest {
     }
 
     @Test
+    fun `truncated stream fails instead of committing a partial answer`() {
+        // Stream ends cleanly but without message_stop.
+        server.enqueue(streamResponse(sse(
+            "message_start" to """{"type":"message_start","message":{"id":"m","model":"claude-opus-4-8"}}""",
+            "content_block_start" to """{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}""",
+            "content_block_delta" to """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial answ"}}""",
+        )))
+        server.enqueue(streamResponse(simpleAnswer()))
+        val conversation = ClaudeConversation(config())
+        assertFailsWith<java.io.IOException> {
+            conversation.ask("q", listOf(Attachment.png(byteArrayOf(1))))
+        }
+        // Rolled back: the retry is a fresh single-message request.
+        conversation.ask("q", listOf(Attachment.png(byteArrayOf(1))))
+        server.takeRequest()
+        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals(1, body["messages"]!!.jsonArray.size)
+    }
+
+    @Test
+    fun `mid-stream fallback updates servedBy and drops pre-boundary thinking from echo`() {
+        server.enqueue(streamResponse(sse(
+            "message_start" to """{"type":"message_start","message":{"id":"m","model":"claude-fable-5"}}""",
+            "content_block_start" to """{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}""",
+            "content_block_delta" to """{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sigA"}}""",
+            "content_block_stop" to """{"type":"content_block_stop","index":0}""",
+            "content_block_start" to """{"type":"content_block_start","index":1,"content_block":{"type":"fallback","from":{"model":"claude-fable-5"},"to":{"model":"claude-opus-4-8"}}}""",
+            "content_block_stop" to """{"type":"content_block_stop","index":1}""",
+            "content_block_start" to """{"type":"content_block_start","index":2,"content_block":{"type":"text","text":""}}""",
+            "content_block_delta" to """{"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"rescued"}}""",
+            "content_block_stop" to """{"type":"content_block_stop","index":2}""",
+            "message_delta" to """{"type":"message_delta","delta":{"stop_reason":"end_turn"}}""",
+            "message_stop" to """{"type":"message_stop"}""",
+        )))
+        server.enqueue(streamResponse(simpleAnswer()))
+        val conversation = ClaudeConversation(config(ClaudeModel.FABLE_5))
+        val result = conversation.ask("q", listOf(Attachment.png(byteArrayOf(1))))
+        assertEquals("claude-opus-4-8", result.servedBy)
+        assertEquals("rescued", result.text)
+
+        conversation.ask("follow-up")
+        server.takeRequest()
+        val second = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        val assistant = second["messages"]!!.jsonArray[1].jsonObject["content"]!!.jsonArray
+        // Only the text block survives: pre-fallback thinking + marker dropped.
+        assertEquals(1, assistant.size)
+        assertEquals("text", assistant[0].jsonObject["type"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `sse comment lines are ignored`() {
+        server.enqueue(streamResponse(": keep-alive\n\n" + simpleAnswer()))
+        val conversation = ClaudeConversation(config())
+        val result = conversation.ask("q", listOf(Attachment.png(byteArrayOf(1))))
+        assertEquals("The answer.", result.text)
+    }
+
+    @Test
     fun `testApiKey reports invalid key`() {
         server.enqueue(MockResponse().setResponseCode(401).setBody("{}"))
         assertEquals("Invalid API key", ClaudeConversation.testApiKey(config()))

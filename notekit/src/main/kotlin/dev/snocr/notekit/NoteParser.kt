@@ -14,7 +14,9 @@ object NoteParser {
     private const val SIGNATURE_OFFSET = 4
     private const val SIGNATURE_LENGTH = 20 // "SN_FILE_VER_YYYYNNNN"
     private const val ADDRESS_SIZE = 4
-    private val PARAM_REGEX = Regex("<([^:<>]+):(.*?)>")
+    // [^\n] in the value mirrors Python's '.' (which excludes only \n,
+    // whereas Java's '.' also excludes \r and Unicode line separators).
+    private val PARAM_REGEX = Regex("<([^:<>]+):([^\\n]*?)>")
     private val LAYER_KEYS = listOf("MAINLAYER", "LAYER1", "LAYER2", "LAYER3", "BGLAYER")
 
     fun parse(data: ByteArray): Notebook {
@@ -91,10 +93,7 @@ object NoteParser {
     private fun contentAt(data: ByteArray, address: Long): ByteArray? {
         if (address == 0L) return null
         val offset = checkedOffset(data, address)
-        val length = readUInt32(data, offset).toInt()
-        if (offset + 4 + length > data.size) {
-            throw UnsupportedNoteFormatException("content block at $address exceeds file size")
-        }
+        val length = checkedBlockLength(data, offset, address)
         return data.copyOfRange(offset + 4, offset + 4 + length)
     }
 
@@ -102,15 +101,21 @@ object NoteParser {
         val block = MetadataBlock()
         if (address == 0L) return block
         val offset = checkedOffset(data, address)
-        val length = readUInt32(data, offset).toInt()
-        if (offset + 4 + length > data.size) {
-            throw UnsupportedNoteFormatException("metadata block at $address exceeds file size")
-        }
+        val length = checkedBlockLength(data, offset, address)
         val text = String(data, offset + 4, length, Charsets.UTF_8)
         for (match in PARAM_REGEX.findAll(text)) {
             block.put(match.groupValues[1], match.groupValues[2])
         }
         return block
+    }
+
+    /** Validates the block's 32-bit length field in Long math (no overflow). */
+    private fun checkedBlockLength(data: ByteArray, offset: Int, address: Long): Int {
+        val length = readUInt32(data, offset)
+        if (offset + 4 + length > data.size) {
+            throw UnsupportedNoteFormatException("block at $address exceeds file size")
+        }
+        return length.toInt()
     }
 
     private fun checkedOffset(data: ByteArray, address: Long): Int {

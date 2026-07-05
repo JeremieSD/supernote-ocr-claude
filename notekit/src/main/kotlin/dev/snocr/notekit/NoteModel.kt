@@ -7,7 +7,14 @@ class MetadataBlock {
     private val params = LinkedHashMap<String, MutableList<String>>()
 
     fun put(key: String, value: String) {
-        params.getOrPut(key) { mutableListOf() }.add(value)
+        val existing = params.getOrPut(key) { mutableListOf() }
+        // Parity with supernotelib: a duplicate key whose first value was
+        // empty overwrites it (Python gates list-building on truthiness).
+        if (existing.size == 1 && existing[0].isEmpty()) {
+            existing[0] = value
+        } else {
+            existing.add(value)
+        }
     }
 
     /** First value for the key, or null. */

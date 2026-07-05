@@ -2,13 +2,11 @@ package dev.snocr.claudekit
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -42,6 +40,9 @@ class Attachment private constructor(val mediaType: String, val data: ByteArray)
  * Attachments are sent once with the first question (with a prompt-cache
  * breakpoint after the last one, so follow-up questions reuse the cached
  * image tokens); follow-ups send text only.
+ *
+ * ask() is blocking and must not be called concurrently; cancel() may be
+ * called from any thread.
  */
 class ClaudeConversation(
     private val config: ClaudeConfig,
@@ -50,14 +51,19 @@ class ClaudeConversation(
 ) {
     private val client: OkHttpClient = httpClient ?: defaultHttpClient()
     private val history = mutableListOf<JsonObject>()
+    private val historyLock = Any()
     private val activeCall = AtomicReference<Call?>(null)
     private val json = Json { ignoreUnknownKeys = true }
 
-    val turnCount: Int get() = history.size / 2
+    val turnCount: Int get() = synchronized(historyLock) { history.size / 2 }
 
     /**
      * Sends [question] (with [attachments] on the first turn only) and
      * streams the answer. Blocking; call from a background thread.
+     *
+     * On any failure (HTTP error, stream error, truncated stream, refusal)
+     * the question is rolled back so the conversation stays consistent and
+     * the next ask() retries cleanly.
      *
      * @param attachments page images or PDFs; only used when the
      *   conversation is empty.
@@ -69,8 +75,47 @@ class ClaudeConversation(
         attachments: List<Attachment> = emptyList(),
         onDelta: (String) -> Unit = {},
     ): TurnResult {
+        val userTurn = buildUserTurn(question, attachments)
+        val messages = synchronized(historyLock) {
+            history.add(userTurn)
+            JsonArray(history.toList())
+        }
+
+        val outcome = try {
+            executeStream(messages, onDelta)
+        } catch (e: Exception) {
+            synchronized(historyLock) { history.remove(userTurn) }
+            throw e
+        }
+
+        // Commit or roll back the turn. A refused (or block-less) turn cannot
+        // be continued, so it is dropped and the conversation stays usable.
+        val echoBlocks = buildEchoBlocks(outcome)
+        synchronized(historyLock) {
+            if (echoBlocks.isNotEmpty() && outcome.stopReason != "refusal") {
+                history.add(buildJsonObject {
+                    put("role", "assistant")
+                    put("content", JsonArray(echoBlocks))
+                })
+            } else {
+                history.remove(userTurn)
+            }
+        }
+
+        val fullText = outcome.blocks.filter { it.type == "text" }
+            .joinToString("") { it.text.toString() }
+        return TurnResult(fullText, outcome.stopReason, outcome.refusalExplanation, outcome.servedBy)
+    }
+
+    /** Cancels any in-flight request. */
+    fun cancel() {
+        activeCall.getAndSet(null)?.cancel()
+    }
+
+    private fun buildUserTurn(question: String, attachments: List<Attachment>): JsonObject {
+        val firstTurn = synchronized(historyLock) { history.isEmpty() }
         val userContent = buildJsonArray {
-            if (history.isEmpty()) {
+            if (firstTurn) {
                 attachments.forEachIndexed { index, attachment ->
                     add(buildJsonObject {
                         put("type", if (attachment.isDocument) "document" else "image")
@@ -92,11 +137,13 @@ class ClaudeConversation(
                 put("text", question)
             })
         }
-        history.add(buildJsonObject {
+        return buildJsonObject {
             put("role", "user")
             put("content", userContent)
-        })
+        }
+    }
 
+    private fun executeStream(messages: JsonArray, onDelta: (String) -> Unit): StreamOutcome {
         val body = buildJsonObject {
             put("model", config.model.id)
             put("max_tokens", config.maxTokens)
@@ -110,7 +157,7 @@ class ClaudeConversation(
                     add(buildJsonObject { put("model", ClaudeModel.OPUS_4_8.id) })
                 })
             }
-            put("messages", JsonArray(history))
+            put("messages", messages)
         }
 
         val requestBuilder = Request.Builder()
@@ -127,35 +174,18 @@ class ClaudeConversation(
         try {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
-                    // On failure, drop the user turn we optimistically added.
-                    history.removeAt(history.size - 1)
                     throw apiError(response.code, response.body?.string())
                 }
-                val result = consumeStream(response, onDelta)
-                return result
+                return consumeStream(response, onDelta)
             }
-        } catch (e: IOException) {
-            if (history.isNotEmpty() && history.last()["role"]?.jsonPrimitive?.contentOrNull == "user") {
-                history.removeAt(history.size - 1)
-            }
-            throw e
         } finally {
             activeCall.compareAndSet(call, null)
         }
     }
 
-    /** Cancels any in-flight request. */
-    fun cancel() {
-        activeCall.getAndSet(null)?.cancel()
-    }
-
-    private fun consumeStream(response: okhttp3.Response, onDelta: (String) -> Unit): TurnResult {
+    private fun consumeStream(response: okhttp3.Response, onDelta: (String) -> Unit): StreamOutcome {
         val source = response.body?.source() ?: throw ClaudeApiException("empty response body")
-        val assistantBlocks = mutableListOf<BlockAccumulator>()
-        var stopReason: String? = null
-        var refusalExplanation: String? = null
-        var servedBy: String? = null
-        var sawFallbackBlock = false
+        val outcome = StreamOutcome()
 
         var eventName: String? = null
         val dataLines = StringBuilder()
@@ -170,18 +200,23 @@ class ClaudeConversation(
             val obj = element as? JsonObject ?: return
             when (name ?: obj["type"]?.jsonPrimitive?.contentOrNull) {
                 "message_start" -> {
-                    servedBy = obj["message"]?.jsonObject?.get("model")
+                    outcome.servedBy = obj["message"]?.jsonObject?.get("model")
                         ?.jsonPrimitive?.contentOrNull
                 }
                 "content_block_start" -> {
                     val block = obj["content_block"]?.jsonObject ?: return
                     val type = block["type"]?.jsonPrimitive?.contentOrNull ?: return
-                    if (type == "fallback") sawFallbackBlock = true
-                    assistantBlocks.add(BlockAccumulator(type, block))
+                    if (type == "fallback") {
+                        // A server-side fallback took over mid-turn; the rest
+                        // of the response is served by the fallback model.
+                        block["to"]?.jsonObject?.get("model")?.jsonPrimitive?.contentOrNull
+                            ?.let { outcome.servedBy = it }
+                    }
+                    outcome.blocks.add(BlockAccumulator(type, block))
                 }
                 "content_block_delta" -> {
                     val delta = obj["delta"]?.jsonObject ?: return
-                    val block = assistantBlocks.lastOrNull() ?: return
+                    val block = outcome.blocks.lastOrNull() ?: return
                     when (delta["type"]?.jsonPrimitive?.contentOrNull) {
                         "text_delta" -> {
                             val text = delta["text"]?.jsonPrimitive?.contentOrNull ?: ""
@@ -202,12 +237,13 @@ class ClaudeConversation(
                 }
                 "message_delta" -> {
                     val deltaObj = obj["delta"]?.jsonObject
-                    stopReason = deltaObj?.get("stop_reason")?.jsonPrimitive?.contentOrNull
-                        ?: stopReason
+                    outcome.stopReason = deltaObj?.get("stop_reason")?.jsonPrimitive?.contentOrNull
+                        ?: outcome.stopReason
                     val stopDetails = deltaObj?.get("stop_details") as? JsonObject
-                    refusalExplanation = stopDetails?.get("explanation")
-                        ?.jsonPrimitive?.contentOrNull ?: refusalExplanation
+                    outcome.refusalExplanation = stopDetails?.get("explanation")
+                        ?.jsonPrimitive?.contentOrNull ?: outcome.refusalExplanation
                 }
+                "message_stop" -> outcome.complete = true
                 "error" -> {
                     val error = obj["error"]?.jsonObject
                     throw ClaudeApiException(
@@ -218,68 +254,59 @@ class ClaudeConversation(
             }
         }
 
-        try {
-            while (true) {
-                val line = source.readUtf8Line() ?: break
-                when {
-                    line.isEmpty() -> {
-                        handleEvent(eventName, dataLines.toString())
-                        eventName = null
-                        dataLines.setLength(0)
-                    }
-                    line.startsWith("event:") -> eventName = line.substring(6).trim()
-                    line.startsWith("data:") -> {
-                        if (dataLines.isNotEmpty()) dataLines.append('\n')
-                        dataLines.append(line.substring(5).trim())
-                    }
+        while (true) {
+            val line = source.readUtf8Line() ?: break
+            when {
+                line.isEmpty() -> {
+                    handleEvent(eventName, dataLines.toString())
+                    eventName = null
+                    dataLines.setLength(0)
+                }
+                line.startsWith(":") -> Unit // SSE comment / keep-alive
+                line.startsWith("event:") -> eventName = line.substring(6).trim()
+                line.startsWith("data:") -> {
+                    if (dataLines.isNotEmpty()) dataLines.append('\n')
+                    dataLines.append(line.substring(5).trim())
                 }
             }
-            if (dataLines.isNotEmpty()) handleEvent(eventName, dataLines.toString())
-        } catch (e: ClaudeApiException) {
-            history.removeAt(history.size - 1) // drop the failed user turn
-            throw e
         }
+        if (dataLines.isNotEmpty()) handleEvent(eventName, dataLines.toString())
 
-        val fullText = assistantBlocks.filter { it.type == "text" }
-            .joinToString("") { it.text.toString() }
+        if (!outcome.complete) {
+            // The connection ended before message_stop: the answer is
+            // incomplete and must not be committed to the conversation.
+            throw IOException("stream ended before the answer was complete")
+        }
+        return outcome
+    }
 
-        // Echo the assistant turn back into history for follow-up questions.
-        // Thinking blocks are passed back unchanged; when a server-side
-        // fallback occurred mid-turn, thinking blocks before the boundary are
-        // dropped (per the API's fallback echo rules), as are the marker
-        // blocks themselves.
-        val lastFallbackIndex = assistantBlocks.indexOfLast { it.type == "fallback" }
-        val echoBlocks = assistantBlocks.mapIndexedNotNull { index, block ->
+    /**
+     * Blocks to echo back as the assistant turn for follow-up questions.
+     * Thinking blocks are passed back unchanged; when a server-side fallback
+     * occurred mid-turn, thinking blocks before the boundary are dropped
+     * (per the API's fallback echo rules), as are the marker blocks.
+     */
+    private fun buildEchoBlocks(outcome: StreamOutcome): List<JsonObject> {
+        val lastFallbackIndex = outcome.blocks.indexOfLast { it.type == "fallback" }
+        return outcome.blocks.mapIndexedNotNull { index, block ->
             when (block.type) {
                 "text" -> buildJsonObject {
                     put("type", "text")
                     put("text", block.text.toString())
                 }
                 "thinking" ->
-                    if (sawFallbackBlock && index < lastFallbackIndex) null
+                    if (lastFallbackIndex >= 0 && index < lastFallbackIndex) null
                     else buildJsonObject {
                         put("type", "thinking")
                         put("thinking", block.thinking.toString())
                         put("signature", block.signature.toString())
                     }
                 "redacted_thinking" ->
-                    if (sawFallbackBlock && index < lastFallbackIndex) null
+                    if (lastFallbackIndex >= 0 && index < lastFallbackIndex) null
                     else block.raw
                 else -> null // fallback markers and unknown block types
             }
         }
-        if (echoBlocks.isNotEmpty() && stopReason != "refusal") {
-            history.add(buildJsonObject {
-                put("role", "assistant")
-                put("content", JsonArray(echoBlocks))
-            })
-        } else {
-            // A fully refused (or empty) turn cannot be continued; drop the
-            // user message so the conversation stays valid.
-            history.removeAt(history.size - 1)
-        }
-
-        return TurnResult(fullText, stopReason, refusalExplanation, servedBy)
     }
 
     private fun apiError(code: Int, body: String?): ClaudeApiException {
@@ -296,9 +323,18 @@ class ClaudeConversation(
 
     private fun friendlyMessage(code: Int, message: String): String = when (code) {
         401 -> "Invalid API key. Check Settings. ($message)"
+        413 -> "Request too large - select fewer pages. ($message)"
         429 -> "Rate limited by the API. Wait a moment and retry. ($message)"
         529 -> "Claude API is overloaded. Retry shortly. ($message)"
         else -> message
+    }
+
+    private class StreamOutcome {
+        val blocks = mutableListOf<BlockAccumulator>()
+        var stopReason: String? = null
+        var refusalExplanation: String? = null
+        var servedBy: String? = null
+        var complete = false
     }
 
     private class BlockAccumulator(val type: String, val raw: JsonObject) {

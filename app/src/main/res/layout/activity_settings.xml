@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:hint="@string/api_key_hint"
             android:importantForAutofill="no"
-            android:inputType="text"
+            android:inputType="textNoSuggestions"
             android:textSize="14sp" />
 
         <LinearLayout

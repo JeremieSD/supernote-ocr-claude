@@ -20,7 +20,7 @@ class Prefs(context: Context) {
 
     var maxPages: Int
         get() = prefs.getInt(KEY_MAX_PAGES, DEFAULT_MAX_PAGES)
-        set(value) = prefs.edit().putInt(KEY_MAX_PAGES, value.coerceIn(1, 100)).apply()
+        set(value) = prefs.edit().putInt(KEY_MAX_PAGES, value.coerceIn(1, MAX_MAX_PAGES)).apply()
 
     val model: ClaudeModel get() = ClaudeModel.fromId(modelId)
 
@@ -31,5 +31,6 @@ class Prefs(context: Context) {
         private const val KEY_MODEL = "model"
         private const val KEY_MAX_PAGES = "max_pages"
         const val DEFAULT_MAX_PAGES = 20
+        const val MAX_MAX_PAGES = 40
     }
 }
