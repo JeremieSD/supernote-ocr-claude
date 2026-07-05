@@ -5,6 +5,9 @@ on:
     branches: ["**"]
   workflow_dispatch:
 
+permissions:
+  contents: write # to update the rolling sideload release
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,3 +31,26 @@ jobs:
           name: claude-notes-apk
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+      # Rolling prerelease so the APK can be downloaded directly from the
+      # Releases page in the Manta's browser (no GitHub login required on
+      # public repos, unlike Actions artifacts).
+      - name: Update sideload release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: sideload-latest
+          name: Sideload build (latest)
+          prerelease: true
+          make_latest: false
+          body: |
+            Rolling build of the Claude Notes APK for sideloading on the
+            Supernote Manta. Always the most recent green build.
+
+            - Branch: `${{ github.ref_name }}`
+            - Commit: `${{ github.sha }}`
+            - Built: ${{ github.event.head_commit.timestamp || 'manual dispatch' }}
+
+            Download **app-release.apk** below, open it on the Manta, and
+            install. Updates install over the previous version (same
+            signature). See the README for setup.
+          files: app/build/outputs/apk/release/app-release.apk

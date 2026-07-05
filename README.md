@@ -18,9 +18,11 @@ handwritten `.note` files, type a question, and Claude reads your handwriting
 
 ## Install on the Manta
 
-1. Grab `app-release.apk` (built by the *Build APK* GitHub Actions workflow —
-   download the `claude-notes-apk` artifact from the latest run, or build
-   locally, see below).
+1. Grab `app-release.apk` from the
+   [**sideload-latest** release](https://github.com/JeremieSD/supernote-ocr-claude/releases/tag/sideload-latest)
+   — you can open that page directly in the Manta's browser and download it
+   on-device. (Every green *Build APK* CI run refreshes it; the same file is
+   also available as the `claude-notes-apk` Actions artifact.)
 2. Sideload it on the Manta (Settings → My apps / sideloading, or
    `adb install app-release.apk` if you use adb).
 3. Open the app → **Settings**:
