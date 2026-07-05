@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- White rounded tile -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,8 h68 a12,12 0 0 1 12,12 v68 a12,12 0 0 1 -12,12 h-68 a12,12 0 0 1 -12,-12 v-68 a12,12 0 0 1 12,-12 z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="5"
+        android:pathData="M20,8 h68 a12,12 0 0 1 12,12 v68 a12,12 0 0 1 -12,12 h-68 a12,12 0 0 1 -12,-12 v-68 a12,12 0 0 1 12,-12 z" />
+    <!-- Handwriting lines -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M24,34 q10,-6 20,0 t20,0" />
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M24,48 q12,-5 24,0 t16,0" />
+    <!-- Question mark -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M42,68 a12,12 0 1 1 16,11 q-4,2 -4,7" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,92 m-4,0 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0" />
+</vector>

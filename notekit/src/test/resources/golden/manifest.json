@@ -1,0 +1,213 @@
+{
+  "notes": [
+    {
+      "file": "manta_basic.note",
+      "pages": [
+        "manta_basic_p0.png",
+        "manta_basic_p1.png"
+      ]
+    },
+    {
+      "file": "manta_horizontal.note",
+      "pages": [
+        "manta_horizontal_p0.png"
+      ]
+    },
+    {
+      "file": "manta_custom_bg.note",
+      "pages": [
+        "manta_custom_bg_p0.png"
+      ]
+    },
+    {
+      "file": "a5x_legacy.note",
+      "pages": [
+        "a5x_legacy_p0.png"
+      ]
+    }
+  ],
+  "rle": [
+    {
+      "input": "rle_00.in",
+      "expected": "rle_00.out",
+      "highres": true,
+      "width": 331,
+      "height": 77
+    },
+    {
+      "input": "rle_01.in",
+      "expected": "rle_01.out",
+      "highres": false,
+      "width": 64,
+      "height": 32
+    },
+    {
+      "input": "rle_02.in",
+      "expected": "rle_02.out",
+      "highres": true,
+      "width": 64,
+      "height": 256
+    },
+    {
+      "input": "rle_03.in",
+      "expected": "rle_03.out",
+      "highres": false,
+      "width": 331,
+      "height": 77
+    },
+    {
+      "input": "rle_04.in",
+      "expected": "rle_04.out",
+      "highres": true,
+      "width": 64,
+      "height": 256
+    },
+    {
+      "input": "rle_05.in",
+      "expected": "rle_05.out",
+      "highres": false,
+      "width": 331,
+      "height": 32
+    },
+    {
+      "input": "rle_06.in",
+      "expected": "rle_06.out",
+      "highres": true,
+      "width": 128,
+      "height": 32
+    },
+    {
+      "input": "rle_07.in",
+      "expected": "rle_07.out",
+      "highres": false,
+      "width": 64,
+      "height": 77
+    },
+    {
+      "input": "rle_08.in",
+      "expected": "rle_08.out",
+      "highres": true,
+      "width": 64,
+      "height": 32
+    },
+    {
+      "input": "rle_09.in",
+      "expected": "rle_09.out",
+      "highres": false,
+      "width": 331,
+      "height": 256
+    },
+    {
+      "input": "rle_10.in",
+      "expected": "rle_10.out",
+      "highres": true,
+      "width": 64,
+      "height": 256
+    },
+    {
+      "input": "rle_11.in",
+      "expected": "rle_11.out",
+      "highres": false,
+      "width": 64,
+      "height": 77
+    },
+    {
+      "input": "rle_12.in",
+      "expected": "rle_12.out",
+      "highres": true,
+      "width": 128,
+      "height": 256
+    },
+    {
+      "input": "rle_13.in",
+      "expected": "rle_13.out",
+      "highres": false,
+      "width": 331,
+      "height": 256
+    },
+    {
+      "input": "rle_14.in",
+      "expected": "rle_14.out",
+      "highres": true,
+      "width": 331,
+      "height": 32
+    },
+    {
+      "input": "rle_15.in",
+      "expected": "rle_15.out",
+      "highres": false,
+      "width": 128,
+      "height": 32
+    },
+    {
+      "input": "rle_16.in",
+      "expected": "rle_16.out",
+      "highres": true,
+      "width": 64,
+      "height": 256
+    },
+    {
+      "input": "rle_17.in",
+      "expected": "rle_17.out",
+      "highres": false,
+      "width": 331,
+      "height": 32
+    },
+    {
+      "input": "rle_18.in",
+      "expected": "rle_18.out",
+      "highres": true,
+      "width": 331,
+      "height": 256
+    },
+    {
+      "input": "rle_19.in",
+      "expected": "rle_19.out",
+      "highres": false,
+      "width": 64,
+      "height": 256
+    },
+    {
+      "input": "rle_20.in",
+      "expected": "rle_20.out",
+      "highres": true,
+      "width": 331,
+      "height": 256
+    },
+    {
+      "input": "rle_21.in",
+      "expected": "rle_21.out",
+      "highres": false,
+      "width": 64,
+      "height": 77
+    },
+    {
+      "input": "rle_22.in",
+      "expected": "rle_22.out",
+      "highres": true,
+      "width": 64,
+      "height": 77
+    },
+    {
+      "input": "rle_23.in",
+      "expected": "rle_23.out",
+      "highres": false,
+      "width": 331,
+      "height": 77
+    },
+    {
+      "input": "rle_100.in",
+      "expected": "rle_100.out",
+      "highres": true,
+      "width": 128,
+      "height": 64
+    },
+    {
+      "input": "rle_101.in",
+      "expected": "rle_101.out",
+      "highres": false,
+      "width": 128,
+      "height": 64
+    }
+  ]
+}
