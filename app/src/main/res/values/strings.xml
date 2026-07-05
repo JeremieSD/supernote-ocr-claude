@@ -39,6 +39,7 @@
     <string name="too_many_pages">Selected %1$d pages, but the limit is %2$d (change it in Settings or narrow the range).</string>
     <string name="nothing_shared">Nothing to ask about. Open a notebook from the main screen or share an image/PDF to this app.</string>
     <string name="cannot_read_shared">Could not read the shared file.</string>
+    <string name="new_conversation">New topic started. Pages will be re-sent with your next question.</string>
     <string name="share_answer">Share answer</string>
     <string name="copied">Copied.</string>
     <plurals name="shared_items">
