@@ -40,6 +40,17 @@ sealed class PageSource : Closeable {
 
 private class NotePageSource(file: File) : PageSource() {
     private val notebook: Notebook = NoteParser.parse(file.readBytes())
+
+    private val androidPngDecoder = PngBitmapDecoder { data ->
+        val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
+            ?: throw IOException("cannot decode template PNG")
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val result = RgbaBitmap(pixels, bitmap.width, bitmap.height)
+        bitmap.recycle()
+        result
+    }
+
     private val renderer = PageRenderer(androidPngDecoder)
 
     override val pageCount: Int get() = notebook.totalPages
@@ -50,16 +61,6 @@ private class NotePageSource(file: File) : PageSource() {
             rendered.argb, rendered.width, rendered.height, Bitmap.Config.ARGB_8888
         )
         return full.scaledToLongEdge(maxLongEdge)
-    }
-
-    private val androidPngDecoder = PngBitmapDecoder { data ->
-        val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-            ?: throw IOException("cannot decode template PNG")
-        val pixels = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        val result = RgbaBitmap(pixels, bitmap.width, bitmap.height)
-        bitmap.recycle()
-        result
     }
 }
 
