@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.RectF
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -49,6 +50,7 @@ class AskActivity : AppCompatActivity() {
 
     private var noteFile: File? = null
     private var pageIndices: IntArray? = null
+    private var pageRegions: FloatArray? = null
     private var sharedUris: List<Uri> = emptyList()
 
     private var conversation: AiConversation? = null
@@ -106,6 +108,7 @@ class AskActivity : AppCompatActivity() {
                 }
                 noteFile = file
                 pageIndices = intent.getIntArrayExtra(EXTRA_PAGE_INDICES)
+                pageRegions = intent.getFloatArrayExtra(EXTRA_PAGE_REGIONS)
                 val pageNote = pageIndices?.let {
                     " · " + resources.getQuantityString(R.plurals.n_pages, it.size, it.size)
                 } ?: ""
@@ -262,13 +265,43 @@ class AskActivity : AppCompatActivity() {
             return indices.mapIndexed { i, pageIndex ->
                 if (stopRequested) throw StoppedException()
                 setStatus(getString(R.string.rendering_page, i + 1, indices.size))
-                val bitmap = source.renderPage(pageIndex, CONTEXT_LONG_EDGE)
+                val bitmap = renderPage(source, pageIndex, regionAt(i))
                 val attachment = if (isNote) Attachment.png(bitmap.toPng())
                 else Attachment.jpeg(bitmap.toJpeg())
                 bitmap.recycle()
                 attachment
             }
         }
+    }
+
+    /** The chosen crop for the i-th selected page, normalized to the page, or null. */
+    private fun regionAt(i: Int): RectF? {
+        val arr = pageRegions ?: return null
+        val o = i * 4
+        if (o + 3 >= arr.size) return null
+        val l = arr[o]; val t = arr[o + 1]; val r = arr[o + 2]; val b = arr[o + 3]
+        if (l < 0f || t < 0f || r <= l || b <= t) return null
+        return RectF(l, t, r, b)
+    }
+
+    /**
+     * Renders a page, optionally cropped to [region]. For a crop, the page is
+     * rendered larger so the cropped-out area keeps roughly [CONTEXT_LONG_EDGE]
+     * pixels of detail, bounded by [MAX_CROP_RENDER] to keep memory in check.
+     */
+    private fun renderPage(source: PageSource, pageIndex: Int, region: RectF?): Bitmap {
+        if (region == null) return source.renderPage(pageIndex, CONTEXT_LONG_EDGE)
+        val longFrac = maxOf(region.width(), region.height()).coerceAtLeast(0.05f)
+        val pageLongEdge = (CONTEXT_LONG_EDGE / longFrac).toInt()
+            .coerceIn(CONTEXT_LONG_EDGE, MAX_CROP_RENDER)
+        val full = source.renderPage(pageIndex, pageLongEdge)
+        val x = (region.left * full.width).toInt().coerceIn(0, full.width - 1)
+        val y = (region.top * full.height).toInt().coerceIn(0, full.height - 1)
+        val w = (region.width() * full.width).toInt().coerceIn(1, full.width - x)
+        val h = (region.height() * full.height).toInt().coerceIn(1, full.height - y)
+        val crop = Bitmap.createBitmap(full, x, y, w, h)
+        if (crop != full) full.recycle()
+        return crop
     }
 
     private fun attachmentsFromUri(uri: Uri): List<Attachment> {
@@ -364,9 +397,14 @@ class AskActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_FILE_PATH = "file_path"
         const val EXTRA_PAGE_INDICES = "page_indices"
+        const val EXTRA_PAGE_REGIONS = "page_regions"
 
         // Context pages are downsampled to this long edge to control token cost
         // while staying legible for OCR.
         private const val CONTEXT_LONG_EDGE = 1600
+
+        // Upper bound on the page render used when cropping, so a small region
+        // keeps detail without rendering an unbounded full-page bitmap.
+        private const val MAX_CROP_RENDER = 2400
     }
 }
