@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Heavy border to signal selection clearly on e-ink. -->
+    <item>
+        <shape android:shape="rectangle">
+            <stroke android:width="6dp" android:color="@android:color/black" />
+            <solid android:color="#22000000" />
+        </shape>
+    </item>
+    <!-- A filled corner tab as a checkmark stand-in. -->
+    <item android:gravity="top|end" android:top="0dp" android:right="0dp">
+        <shape android:shape="rectangle">
+            <size android:width="44dp" android:height="44dp" />
+            <solid android:color="@android:color/black" />
+        </shape>
+    </item>
+</layer-list>

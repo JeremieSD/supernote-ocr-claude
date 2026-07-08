@@ -50,7 +50,37 @@
         <item quantity="other">%d shared items</item>
     </plurals>
 
+    <!-- Reader -->
+    <string name="thumbnail">Page thumbnail</string>
+    <string name="opening_notebook">Opening notebook…</string>
+    <string name="reader_hint">Tap pages to pick which ones your question is about, then continue. With none selected, all pages are used.</string>
+    <string name="page_n">Page %1$d</string>
+    <string name="ask_about_all">Ask about all pages</string>
+    <plurals name="ask_about_pages">
+        <item quantity="one">Ask about %d page</item>
+        <item quantity="other">Ask about %d pages</item>
+    </plurals>
+    <plurals name="n_pages">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+
+    <!-- Ask input -->
+    <string name="type_instead">Type instead</string>
+    <string name="write_instead">Write instead</string>
+    <string name="undo">Undo</string>
+    <string name="clear">Clear</string>
+    <string name="your_question">Your question</string>
+    <string name="write_a_question">Write your question in the box above (or tap Type instead).</string>
+    <string name="waiting_for_model">Sending to %1$s…</string>
+
     <!-- Settings -->
+    <string name="provider_label">Provider</string>
+    <string name="anthropic_key_label">Anthropic API key</string>
+    <string name="openrouter_key_label">OpenRouter API key</string>
+    <string name="openrouter_key_hint">sk-or-…</string>
+    <string name="custom_model">Custom model id…</string>
+    <string name="custom_model_hint">e.g. google/gemini-2.0-flash-001</string>
     <string name="api_key_label">Anthropic API key</string>
     <string name="api_key_hint">sk-ant-…</string>
     <string name="import_key">Import from file</string>

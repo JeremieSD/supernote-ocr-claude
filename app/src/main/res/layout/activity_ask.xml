@@ -3,42 +3,25 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="12dp">
 
     <TextView
         android:id="@+id/ask_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="20sp"
+        android:textSize="18sp"
         android:textStyle="bold"
         android:textColor="@android:color/black" />
 
-    <LinearLayout
+    <!-- Handwriting canvas (default) -->
+    <dev.snocr.app.DrawingView
+        android:id="@+id/drawing_view"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:layout_height="200dp"
         android:layout_marginTop="8dp"
-        android:gravity="center_vertical">
+        android:background="@drawable/canvas_border" />
 
-        <TextView
-            android:id="@+id/pages_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/pages_label"
-            android:textSize="16sp" />
-
-        <EditText
-            android:id="@+id/pages_input"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:hint="@string/pages_hint"
-            android:inputType="text"
-            android:importantForAutofill="no"
-            android:textSize="16sp" />
-    </LinearLayout>
-
+    <!-- Typed question (hidden until 'Type instead') -->
     <EditText
         android:id="@+id/prompt_input"
         android:layout_width="match_parent"
@@ -50,13 +33,44 @@
         android:inputType="textMultiLine|textCapSentences"
         android:minLines="2"
         android:maxLines="5"
-        android:textSize="18sp" />
+        android:textSize="18sp"
+        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="6dp">
+
+        <Button
+            android:id="@+id/toggle_input_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/type_instead" />
+
+        <Button
+            android:id="@+id/undo_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="@string/undo" />
+
+        <Button
+            android:id="@+id/clear_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="@string/clear" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp">
 
         <Button
             android:id="@+id/ask_button"
@@ -70,7 +84,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:text="@string/transcribe" />
 
         <Button
@@ -78,7 +92,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:enabled="false"
             android:text="@string/stop" />
     </LinearLayout>
@@ -95,7 +109,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:fillViewport="true">
 
         <TextView
@@ -111,7 +125,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="6dp">
 
         <Button
             android:id="@+id/copy_button"
@@ -125,7 +139,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:text="@string/share" />
 
         <Button
@@ -133,7 +147,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:text="@string/new_question" />
     </LinearLayout>
 </LinearLayout>
