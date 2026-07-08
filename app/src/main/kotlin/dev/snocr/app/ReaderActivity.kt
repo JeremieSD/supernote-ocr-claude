@@ -1,8 +1,10 @@
 package dev.snocr.app
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.RectF
 import android.os.Bundle
 import android.util.LruCache
 import android.view.LayoutInflater
@@ -11,6 +13,8 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -20,7 +24,8 @@ import java.util.concurrent.Executors
 /**
  * Opens a notebook (or PDF) and shows its pages in a vertical scroll, the way
  * the Supernote app presents a document. Tap pages to select which ones the
- * question should be about, then continue to the Ask screen.
+ * question should be about; long-press a page to pick just an area of it. Then
+ * continue to the Ask screen.
  */
 class ReaderActivity : AppCompatActivity() {
 
@@ -28,9 +33,11 @@ class ReaderActivity : AppCompatActivity() {
     private lateinit var statusView: TextView
     private lateinit var recycler: RecyclerView
     private lateinit var askButton: Button
+    private lateinit var cropLauncher: ActivityResultLauncher<Intent>
 
     private var pageCount = 0
     private val selected = linkedSetOf<Int>()
+    private val regions = HashMap<Int, RectF>()
 
     // One page render at a time (PdfRenderer requires it); cache rendered pages.
     private val renderExecutor = Executors.newSingleThreadExecutor()
@@ -49,6 +56,22 @@ class ReaderActivity : AppCompatActivity() {
         recycler = findViewById(R.id.page_list)
         askButton = findViewById(R.id.reader_ask_button)
         recycler.layoutManager = LinearLayoutManager(this)
+
+        cropLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+            val data = result.data ?: return@registerForActivityResult
+            val idx = data.getIntExtra(CropActivity.EXTRA_PAGE_INDEX, -1)
+            if (idx < 0) return@registerForActivityResult
+            val region = data.getFloatArrayExtra(CropActivity.EXTRA_REGION)?.let {
+                if (it.size == 4) RectF(it[0], it[1], it[2], it[3]) else null
+            }
+            if (region != null) regions[idx] = region else regions.remove(idx)
+            selected.add(idx)
+            recycler.adapter?.notifyItemChanged(idx)
+            updateAskButton()
+        }
 
         askButton.setOnClickListener { openAsk() }
         updateAskButton()
@@ -86,11 +109,34 @@ class ReaderActivity : AppCompatActivity() {
 
     private fun openAsk() {
         val indices = if (selected.isEmpty()) IntArray(pageCount) { it } else selected.sorted().toIntArray()
+        val regionArr = FloatArray(indices.size * 4) { -1f }
+        indices.forEachIndexed { i, idx ->
+            regions[idx]?.let { r ->
+                regionArr[i * 4] = r.left
+                regionArr[i * 4 + 1] = r.top
+                regionArr[i * 4 + 2] = r.right
+                regionArr[i * 4 + 3] = r.bottom
+            }
+        }
         startActivity(
             Intent(this, AskActivity::class.java)
                 .putExtra(AskActivity.EXTRA_FILE_PATH, file.absolutePath)
                 .putExtra(AskActivity.EXTRA_PAGE_INDICES, indices)
+                .putExtra(AskActivity.EXTRA_PAGE_REGIONS, regionArr)
         )
+    }
+
+    private fun launchCrop(pageIndex: Int) {
+        val intent = Intent(this, CropActivity::class.java)
+            .putExtra(CropActivity.EXTRA_FILE_PATH, file.absolutePath)
+            .putExtra(CropActivity.EXTRA_PAGE_INDEX, pageIndex)
+        regions[pageIndex]?.let {
+            intent.putExtra(
+                CropActivity.EXTRA_REGION,
+                floatArrayOf(it.left, it.top, it.right, it.bottom)
+            )
+        }
+        cropLauncher.launch(intent)
     }
 
     private inner class PageAdapter : RecyclerView.Adapter<PageHolder>() {
@@ -116,15 +162,22 @@ class ReaderActivity : AppCompatActivity() {
         init {
             view.setOnClickListener {
                 if (boundPage < 0) return@setOnClickListener
-                if (!selected.add(boundPage)) selected.remove(boundPage)
+                if (!selected.add(boundPage)) {
+                    selected.remove(boundPage)
+                    regions.remove(boundPage)
+                }
                 updateSelection()
                 updateAskButton()
+            }
+            view.setOnLongClickListener {
+                if (boundPage < 0 || source == null) return@setOnLongClickListener false
+                launchCrop(boundPage)
+                true
             }
         }
 
         fun bind(position: Int) {
             boundPage = position
-            label.text = getString(R.string.page_n, position + 1)
             updateSelection()
             val cached = pageCache.get(position)
             if (cached != null) {
@@ -149,6 +202,11 @@ class ReaderActivity : AppCompatActivity() {
         }
 
         private fun updateSelection() {
+            label.text = if (regions.containsKey(boundPage)) {
+                getString(R.string.page_area, boundPage + 1)
+            } else {
+                getString(R.string.page_n, boundPage + 1)
+            }
             check.visibility = if (selected.contains(boundPage)) View.VISIBLE else View.GONE
             itemView.isSelected = selected.contains(boundPage)
         }

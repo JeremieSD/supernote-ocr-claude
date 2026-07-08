@@ -53,8 +53,9 @@
     <!-- Reader -->
     <string name="thumbnail">Page thumbnail</string>
     <string name="opening_notebook">Opening notebook…</string>
-    <string name="reader_hint">Tap pages to pick which ones your question is about, then continue. With none selected, all pages are used.</string>
+    <string name="reader_hint">Tap pages to pick which ones your question is about (long-press a page to select just an area). With none selected, all pages are used.</string>
     <string name="page_n">Page %1$d</string>
+    <string name="page_area">Page %1$d · area</string>
     <string name="ask_about_all">Ask about all pages</string>
     <plurals name="ask_about_pages">
         <item quantity="one">Ask about %d page</item>
@@ -64,6 +65,13 @@
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>
     </plurals>
+
+    <!-- Crop / region select -->
+    <string name="crop_hint">Drag a box around the part of the page your question is about.</string>
+    <string name="crop_use">Use area</string>
+    <string name="crop_whole_page">Whole page</string>
+    <string name="crop_clear">Clear</string>
+    <string name="cancel">Cancel</string>
 
     <!-- Ask input -->
     <string name="type_instead">Type instead</string>
