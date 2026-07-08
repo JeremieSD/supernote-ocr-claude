@@ -11,6 +11,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.ImageView
 import android.widget.ListView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -35,8 +36,8 @@ class MainActivity : AppCompatActivity() {
         listView.setOnItemClickListener { _, _, position, _ ->
             val entry = entries[position]
             startActivity(
-                Intent(this, AskActivity::class.java)
-                    .putExtra(AskActivity.EXTRA_FILE_PATH, entry.file.absolutePath)
+                Intent(this, ReaderActivity::class.java)
+                    .putExtra(ReaderActivity.EXTRA_FILE_PATH, entry.file.absolutePath)
             )
         }
     }
@@ -116,7 +117,30 @@ class MainActivity : AppCompatActivity() {
                 DateUtils.getRelativeTimeSpanString(entry.file.lastModified()),
                 Formatter.formatShortFileSize(this@MainActivity, entry.file.length()),
             )
+            loadThumbnail(view.findViewById(R.id.note_thumb), entry.file)
             return view
+        }
+    }
+
+    /** Sets a cached thumbnail immediately, or renders one on a background thread. */
+    private fun loadThumbnail(image: ImageView, file: java.io.File) {
+        image.setTag(R.id.note_thumb, file.absolutePath)
+        val cached = ThumbnailCache.get(file, THUMB_PX)
+        if (cached != null) {
+            image.setImageBitmap(cached)
+            return
+        }
+        image.setImageBitmap(null)
+        thread {
+            val bitmap = ThumbnailCache.firstPage(file, THUMB_PX)
+            if (bitmap != null) {
+                image.post {
+                    // Guard against row recycling to a different file.
+                    if (image.getTag(R.id.note_thumb) == file.absolutePath) {
+                        image.setImageBitmap(bitmap)
+                    }
+                }
+            }
         }
     }
 
@@ -124,5 +148,6 @@ class MainActivity : AppCompatActivity() {
         private const val REQUEST_STORAGE = 1
         private const val MENU_SETTINGS = 10
         private const val MENU_REFRESH = 11
+        private const val THUMB_PX = 200
     }
 }

@@ -24,6 +24,11 @@
         </activity>
 
         <activity
+            android:name=".ReaderActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|uiMode"
+            android:exported="false" />
+
+        <activity
             android:name=".AskActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|uiMode"
             android:exported="true"
